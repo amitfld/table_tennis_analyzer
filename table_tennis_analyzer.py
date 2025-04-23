@@ -3,35 +3,59 @@ from ultralytics import YOLO
 import sys
 import os
 
-def analyze_image(image_path):
-    # Load image
-    image = cv2.imread(image_path)
-    if image is None:
-        print(f"Error loading image: {image_path}")
+# Constants
+START_FRAME = 0
+END_FRAME = 500  # Set to 0 to process the whole video
+
+# Load the model
+print("Loading model...")
+model = YOLO("yolo11n-pose.pt")
+
+def analyze_video(video_path):
+    # Open the video file
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Error opening video file: {video_path}")
         return
+    
+    # Get video properties
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
 
-    # Load the model (make sure you have yolov8n-pose.pt downloaded)
-    print("Loading model...")
-    model = YOLO("yolo11n-pose.pt")
+    # Determine frame range
+    start = START_FRAME
+    end = END_FRAME if END_FRAME != 0 else total_frames
 
-    # Run pose detection
-    print("Running detection...")
-    results = model(image)
+    # Set the video capture to the start frame
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start)
 
-    # Draw the results on the image
-    print("Rendering results...")
-    annotated_frame = results[0].plot()
+    # Define the codec and create a VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter("output_with_detections.mp4", fourcc, fps, (width, height))
 
-    # Save the result to a file
-    # Generate output path: inputname_pose.jpg
-    base, ext = os.path.splitext(os.path.basename(image_path))
-    output_path = f"{base}_pose{ext}"
-    cv2.imwrite(output_path, annotated_frame)
-    print(f"Annotated image saved to {output_path}")
+    print(f"Processing frames {start} to {end}...")
 
+    # Process each frame in the specified range
+    for frame_idx in range(start, end):
+        ret, frame = cap.read()
+        if not ret:
+            print(f"Failed to read frame {frame_idx}")
+            break
+
+        # Run pose detection on the current frame
+        results = model(frame)
+        annotated_frame = results[0].plot()  # Draw poses and bounding boxes on the frame
+
+        # Write the annotated frame to the output video
+        out.write(annotated_frame)
+
+    # Release resources
+    cap.release()
+    out.release()
+    print("Processing complete. Output saved as output_with_detections.mp4")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python table_tennis_analyzer.py <image_path>")
-    else:
-        analyze_image(sys.argv[1])
+    # Run the video analyzer on the specified input video
+    analyze_video("input.mp4")
