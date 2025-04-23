@@ -5,7 +5,7 @@ import os
 
 # Constants
 START_FRAME = 0
-END_FRAME = 500  # Set to 0 to process the whole video
+END_FRAME = 200  # Set to 0 to process the whole video
 
 # Load the model
 print("Loading model...")
