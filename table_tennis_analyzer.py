@@ -1,11 +1,14 @@
 import cv2
 from ultralytics import YOLO
-import sys
 import csv 
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+import numpy as np
+import scipy.ndimage.filters as filters
 
 # Constants
 START_FRAME = 0
-END_FRAME = 200  # Set to 0 to process the whole video
+END_FRAME = 500  # Set to 0 to process the whole video
 
 # Load the model
 print("Loading model...")
@@ -40,6 +43,17 @@ def analyze_video(video_path):
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow(["frame", "player1_position_x", "player1_position_y", "player2_position_x", "player2_position_y"])
 
+    # Position storage for heatmap
+    player1_coords = []
+    player2_coords = []
+
+    # Capture the first frame to use as a background for the heatmap
+    ret, background_frame = cap.read()
+    if not ret:
+        print("Failed to read first frame for background.")
+        return
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start)  # Reset position again for actual processing
+
     print(f"Processing frames {start} to {end}...")
 
     # Process each frame in the specified range
@@ -71,12 +85,14 @@ def analyze_video(video_path):
         # Add player 1 position (left-most)
         if len(player_positions) > 0:
             row.extend(player_positions[0])
+            player1_coords.append(player_positions[0])
         else:
             row.extend(["", ""])
 
         # Add player 2 position (right-most)
         if len(player_positions) > 1:
             row.extend(player_positions[-1])
+            player2_coords.append(player_positions[-1])
         else:
             row.extend(["", ""])
 
@@ -91,8 +107,57 @@ def analyze_video(video_path):
     cap.release()
     out.release()
     csv_file.close()
-    print("Processing complete. Output saved as output_with_detections.mp4 and player_positions.csv")
 
+    print(f"\nDetected player1 in {len(player1_coords)} of {END_FRAME if END_FRAME != 0 else total_frames} frames.")
+    print(f"Detected player2 in {len(player2_coords)} of {END_FRAME if END_FRAME != 0 else total_frames} frames.\n")
+
+    # Create heatmap for each player separately and overlay both on the background frame
+    def plot_dual_heatmap(coords1, coords2, background_image, title, output_filename):
+        h, w, _ = background_image.shape
+        data1 = np.zeros((h, w))
+        data2 = np.zeros((h, w))
+
+        for x, y in coords1:
+            if 0 <= int(y) < h and 0 <= int(x) < w:
+                data1[int(y)][int(x)] += 1
+
+        for x, y in coords2:
+            if 0 <= int(y) < h and 0 <= int(x) < w:
+                data2[int(y)][int(x)] += 1
+
+        # Apply Gaussian blur
+        data1 = filters.gaussian_filter(data1, sigma=40)
+        data2 = filters.gaussian_filter(data2, sigma=40)
+
+        # Normalize independently
+        norm1 = np.sqrt(data1)
+        norm1 = norm1 / np.max(norm1) if np.max(norm1) > 0 else norm1
+        norm2 = np.sqrt(data2)
+        norm2 = norm2 / np.max(norm2) if np.max(norm2) > 0 else norm2
+
+        # Create custom color map
+        colors = [(0, 0, 1), (0, 1, 1), (0, 1, 0.75), (0, 1, 0), (0.75, 1, 0),
+                (1, 1, 0), (1, 0.8, 0), (1, 0.7, 0), (1, 0, 0)]
+        cm = LinearSegmentedColormap.from_list('heatmap', colors)
+
+        # Plot
+        plt.figure(figsize=(10, 6))
+        plt.imshow(cv2.cvtColor(background_image, cv2.COLOR_BGR2RGB))
+        plt.imshow(norm1, cmap=cm, alpha=norm1, origin='upper')
+        plt.imshow(norm2, cmap=cm, alpha=norm2, origin='upper')
+        plt.colorbar(label='Relative Density')
+        plt.title(title)
+        plt.xlabel('X Position')
+        plt.ylabel('Y Position')
+        plt.savefig(output_filename)
+        plt.close()
+
+    # Plot combined normalized dual heatmap
+    plot_dual_heatmap(player1_coords, player2_coords, background_frame,
+                    "Combined Player Position Heatmap", f"player_position_heatmap.png")
+
+    print("\nProcessing complete. Output saved as output_with_detections.mp4, player_positions.csv, and player_position_heatmap.png")
+    
 if __name__ == "__main__":
     # Run the video analyzer on the specified input video
     analyze_video("input.mp4")

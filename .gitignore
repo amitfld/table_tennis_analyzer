@@ -2,3 +2,6 @@
 *pt
 *.mp4
 *.csv
+temp.py
+*.npy
+*.png
