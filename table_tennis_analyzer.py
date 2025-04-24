@@ -7,8 +7,8 @@ import numpy as np
 import scipy.ndimage.filters as filters
 
 # Constants
-START_FRAME = 0
-END_FRAME = 500  # Set to 0 to process the whole video
+START_FRAME = 1900
+END_FRAME = 2250  # Set to 0 to process the whole video
 
 # Load the model
 print("Loading model...")
@@ -47,12 +47,14 @@ def analyze_video(video_path):
     player1_coords = []
     player2_coords = []
 
-    # Capture the first frame to use as a background for the heatmap
+    # Read frame 0 for background
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     ret, background_frame = cap.read()
     if not ret:
         print("Failed to read first frame for background.")
         return
-    cap.set(cv2.CAP_PROP_POS_FRAMES, start)  # Reset position again for actual processing
+    # Set position back to START_FRAME for processing
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start)
 
     print(f"Processing frames {start} to {end}...")
 
