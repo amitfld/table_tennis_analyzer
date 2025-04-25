@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
 import scipy.ndimage.filters as filters
+import easyocr
 
 # Constants
-START_FRAME = 1900
-END_FRAME = 2250  # Set to 0 to process the whole video
+START_FRAME = 25250
+END_FRAME = 26000  # Set to 0 to process the whole video
 
 # Load the model
 print("Loading model...")
@@ -70,6 +71,11 @@ def analyze_video(video_path):
         boxes = results[0].boxes  # Draw poses and bounding boxes on the frame
         player_positions = []
 
+        # Check if frame is valid
+        if not is_valid_frame(boxes, width, height):
+            print(f"Invalid frame number: {frame_idx}")
+            continue
+
         # Extract center points of all detected persons
         if boxes is not None:
             for box in boxes.xyxy:  # (x1, y1, x2, y2)
@@ -110,8 +116,8 @@ def analyze_video(video_path):
     out.release()
     csv_file.close()
 
-    print(f"\nDetected player1 in {len(player1_coords)} of {END_FRAME if END_FRAME != 0 else total_frames} frames.")
-    print(f"Detected player2 in {len(player2_coords)} of {END_FRAME if END_FRAME != 0 else total_frames} frames.\n")
+    print(f"\nDetected player1 in {len(player1_coords)} of {END_FRAME - START_FRAME if END_FRAME != 0 else total_frames} frames.")
+    print(f"Detected player2 in {len(player2_coords)} of {END_FRAME - START_FRAME if END_FRAME != 0 else total_frames} frames.\n")
 
     # Create heatmap for each player separately and overlay both on the background frame
     def plot_dual_heatmap(coords1, coords2, background_image, title, output_filename):
@@ -159,7 +165,59 @@ def analyze_video(video_path):
                     "Combined Player Position Heatmap", f"player_position_heatmap.png")
 
     print("\nProcessing complete. Output saved as output_with_detections.mp4, player_positions.csv, and player_position_heatmap.png")
-    
+
+def is_valid_frame(boxes, frame_width, frame_height):
+    """
+    Determines whether a video frame is valid for analysis based on player detection.
+
+    A frame is considered valid if:
+    - It contains between 3 to 5 detected people (typically 2 players and a referee).
+    - No detected person is overly large in height (to filter out close-up views).
+    - No detected person appears near the bottom of the screen and is large (to avoid rear-view replays).
+    - The leftmost and rightmost people are far enough apart (to ensure a proper side-view).
+
+    Parameters:
+        boxes (Boxes): The detection result containing bounding boxes from the YOLO model.
+        frame_width (int): Width of the video frame.
+        frame_height (int): Height of the video frame.
+
+    Returns:
+        bool: True if the frame passes all validity checks, False otherwise.
+    """
+
+    if boxes is None or not (3 <= len(boxes) <= 5):
+        return False
+
+    people = []
+
+    for box in boxes.xyxy:
+        x1, y1, x2, y2 = box[:4].tolist()
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+        box_height = y2 - y1
+
+        # Skip if someone is too tall (close-up)
+        if box_height / frame_height > 0.5:
+            return False
+
+        # Skip if someone is close to the bottom and also big (likely rear-view)
+        if y2 > 0.85 * frame_height and box_height / frame_height > 0.25:
+            return False
+
+        people.append((cx, cy))
+
+    # Sort people by x (left to right)
+    people.sort(key=lambda p: p[0])
+    leftmost = people[0]
+    rightmost = people[-1]
+
+    # Skip if players are too close together (replay, zoom-in)
+    horizontal_distance = abs(leftmost[0] - rightmost[0])
+    if horizontal_distance < 0.25 * frame_width:
+        return False
+
+    return True
+
 if __name__ == "__main__":
     # Run the video analyzer on the specified input video
     analyze_video("input.mp4")
