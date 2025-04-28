@@ -8,12 +8,15 @@ import scipy.ndimage.filters as filters
 import easyocr
 
 # Constants
-START_FRAME = 25250
-END_FRAME = 26000  # Set to 0 to process the whole video
+START_FRAME = 0
+END_FRAME = 7050  # Set to 0 to process the whole video
 
 # Load the model
 print("Loading model...")
 model = YOLO("yolo11n-pose.pt")
+
+# Initialize EasyOCR once
+reader = easyocr.Reader(['en', 'ru'])
 
 def analyze_video(video_path):
     # Open the video file
@@ -48,6 +51,11 @@ def analyze_video(video_path):
     player1_coords = []
     player2_coords = []
 
+    # Scores storage for score chart
+    player1_scores = []
+    player2_scores = []
+    names_detected = False
+
     # Read frame 0 for background
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     ret, background_frame = cap.read()
@@ -75,6 +83,25 @@ def analyze_video(video_path):
         if not is_valid_frame(boxes, width, height):
             print(f"Invalid frame number: {frame_idx}")
             continue
+
+        if frame_idx % 50 == 0:
+            if not names_detected:
+                player1_name, player2_name = detect_player_names(frame)
+                if player1_name is not None and player2_name is not None:
+                    names_detected = True
+            calculated_score_1, calculated_score_2 = detect_scores(frame)
+            
+            # Add to lists (handle None safely)
+            if calculated_score_1 is not None and calculated_score_2 is not None:
+                player1_scores.append(calculated_score_1)
+                player2_scores.append(calculated_score_2)
+            else:
+                # If detection failed, repeat last known score (optional)
+                if player1_scores:
+                    player1_scores.append(player1_scores[-1])
+                if player2_scores:
+                    player2_scores.append(player2_scores[-1])
+                    
 
         # Extract center points of all detected persons
         if boxes is not None:
@@ -118,6 +145,27 @@ def analyze_video(video_path):
 
     print(f"\nDetected player1 in {len(player1_coords)} of {END_FRAME - START_FRAME if END_FRAME != 0 else total_frames} frames.")
     print(f"Detected player2 in {len(player2_coords)} of {END_FRAME - START_FRAME if END_FRAME != 0 else total_frames} frames.\n")
+
+    # How many points did we collect?
+    num_points = len(player1_scores)
+
+    # Create X-axis as seconds
+    seconds_x = list(range(num_points))  # 0,1,2,3,4...
+
+    # Then plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(seconds_x, player1_scores, label=player1_name, marker='o')
+    plt.plot(seconds_x, player2_scores, label=player2_name, marker='s')
+    plt.xlabel('Seconds')
+    plt.ylabel('Calculated Score')
+    plt.title('Players\' Scores Over Time')
+    plt.legend()
+    plt.grid(True)
+    plt.savefig("score_chart.png")
+    plt.show()
+
+    print("\nScore chart saved as score_chart.png")
+
 
     # Create heatmap for each player separately and overlay both on the background frame
     def plot_dual_heatmap(coords1, coords2, background_image, title, output_filename):
@@ -198,10 +246,12 @@ def is_valid_frame(boxes, frame_width, frame_height):
 
         # Skip if someone is too tall (close-up)
         if box_height / frame_height > 0.5:
+            print("Person too big")
             return False
 
         # Skip if someone is close to the bottom and also big (likely rear-view)
         if y2 > 0.85 * frame_height and box_height / frame_height > 0.25:
+            print(f"Too clost to bottom and too big: {box_height / frame_height}")
             return False
 
         people.append((cx, cy))
@@ -214,9 +264,85 @@ def is_valid_frame(boxes, frame_width, frame_height):
     # Skip if players are too close together (replay, zoom-in)
     horizontal_distance = abs(leftmost[0] - rightmost[0])
     if horizontal_distance < 0.25 * frame_width:
+        print("Players too close together")
         return False
 
     return True
+
+def detect_player_names(frame):
+    h, w, _ = frame.shape
+    top = int(0.83 * h)
+    bottom = int(0.965 * h)
+    left = int(0.081 * w)
+    right = int(0.3 * w)
+
+    name_region = frame[top:bottom, left:right]
+    name_region = cv2.resize(name_region, (2 * (right - left), 2 * (bottom - top)), interpolation=cv2.INTER_LINEAR)
+
+    results = reader.readtext(name_region, low_text=0.3)
+
+    player_names = []
+    for bbox, text, confidence in results:
+        clean_text = text.strip()
+        if clean_text.isalpha() or ' ' in clean_text:  # crude check for names
+            player_names.append(clean_text)
+
+    if len(player_names) >= 2:
+        player1_name = player_names[0]
+        player2_name = player_names[1]
+        print(f"Detected Player 1: {player1_name}")
+        print(f"Detected Player 2: {player2_name}")
+        return player1_name, player2_name
+    else:
+        print("Failed to detect both player names.")
+        return None, None
+
+def detect_scores(frame):
+    h, w, _ = frame.shape
+    top = int(0.83 * h)
+    bottom = int(0.965 * h)
+    left = int(0.23 * w)
+    right = int(0.29 * w)
+
+    score_region = frame[top:bottom, left:right]
+    score_region = cv2.resize(score_region, (2 * (right - left), 2 * (bottom - top)), interpolation=cv2.INTER_LINEAR)
+
+    results = reader.readtext(score_region, allowlist ='0123456789', low_text=0.3, mag_ratio=2)
+
+    numbers = []
+    for bbox, text, confidence in results:
+        text = text.strip()
+        if text.isdigit():
+            numbers.append(int(text))
+    
+    if len(numbers) not in [2, 4]:
+        results = reader.readtext(score_region, allowlist ='0123456789', low_text=0.3, mag_ratio=4)
+
+        numbers = []
+        for bbox, text, confidence in results:
+            text = text.strip()
+            if text.isdigit():
+                numbers.append(int(text))
+
+    if len(numbers) == 2:
+        games_won_1 = numbers[0]
+        games_won_2 = numbers[1]
+        calculated_score_1 = games_won_1 * 10
+        calculated_score_2 = games_won_2 * 10
+        return calculated_score_1, calculated_score_2
+    elif len(numbers) == 4:
+        games_won_1 = numbers[0]
+        points_1 = numbers[1]
+        games_won_2 = numbers[2]
+        points_2 = numbers[3]
+        print(f"Player 1 won {games_won_1} games and has {points_1} points")
+        print(f"Player 2 won {games_won_2} games and has {points_2} points")
+        calculated_score_1 = games_won_1 * 10 + points_1
+        calculated_score_2 = games_won_2 * 10 + points_2
+        return calculated_score_1, calculated_score_2
+    else:
+        print("Failed to detect two scores.")
+        return None, None
 
 if __name__ == "__main__":
     # Run the video analyzer on the specified input video
