@@ -8,8 +8,8 @@ import scipy.ndimage.filters as filters
 import easyocr
 
 # Constants
-START_FRAME = 59300
-END_FRAME = 61500  # Set to 0 to process the whole video
+START_FRAME = 0
+END_FRAME = 0  # Set to 0 to process the whole video
 
 # Load the model
 print("\nLoading model...")
@@ -191,8 +191,8 @@ def analyze_video(video_path):
                 data2[int(y)][int(x)] += 1
 
         # Apply Gaussian blur
-        data1 = filters.gaussian_filter(data1, sigma=40)
-        data2 = filters.gaussian_filter(data2, sigma=40)
+        data1 = filters.gaussian_filter(data1, sigma=45)
+        data2 = filters.gaussian_filter(data2, sigma=45)
 
         # Normalize independently
         norm1 = np.sqrt(data1)
