@@ -2,7 +2,9 @@
 
 This project is a **computer vision tool** designed to **analyze table tennis matches**. It tracks player positions, scores, and movement patterns from video footage, providing rich **visual insights** like annotated videos, heatmaps, and score charts.
 
-> ⚠️ **Disclaimer:**  
+---
+
+> ## ⚠️ **Disclaimer:**  
 > This tool is for **educational and research purposes only**. It was developed as part of a university course on AI applications and computer vision, and is not affiliated with or endorsed by any professional sports body.
 
 ---
@@ -64,7 +66,7 @@ See [`requirements.txt`](requirements.txt) for the full list of dependencies.
 ## 📈 How It Works
 
 1️⃣ **Load the Video**  
-Reads your `input.mp4` file and iterates through each frame (configurable via `START_FRAME` and `END_FRAME`).
+- Reads your `input.mp4` file and iterates through each frame (configurable via `START_FRAME` and `END_FRAME`).
 
 2️⃣ **Player Detection**  
 For each valid frame:
@@ -123,7 +125,7 @@ input.mp4
 
 3️⃣ **Set Up a Virtual Environment**
 
-It’s recommended to use a virtual environment to manage dependencies cleanly:
+- It’s recommended to use a virtual environment to manage dependencies cleanly:
 
 ```bash
 python -m venv .venv
@@ -132,7 +134,7 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 4️⃣ **Install Required Packages**
 
-Make sure you have `pip` upgraded, then install dependencies:
+- Make sure you have `pip` upgraded, then install dependencies:
 
 ```bash
 pip install --upgrade pip
@@ -149,16 +151,9 @@ START_FRAME = 0      # Change to your desired start frame
 END_FRAME = 0        # Change to your desired end frame (0 = full video)
 ```
 
-For example, to analyze frames 100–500:
-
-```python
-START_FRAME = 100
-END_FRAME = 500
-```
-
 6️⃣ **Run the Analyzer**
 
-Start the analysis with:
+- Start the analysis with:
 
 ```bash
 python table_tennis_analyzer.py
